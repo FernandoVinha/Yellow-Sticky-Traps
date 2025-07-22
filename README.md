@@ -157,4 +157,71 @@ As a result, when the model detects these “unlabeled” insects, they are coun
 
 #### **Conclusion:**
 
-Given the trade-off between accuracy, recall, and resource requirements—and considering the current state of the dataset—the **5MPX (imgsz=1920) model** is the best choice for further development and deployment. Future work should include revising and completing the annotation set to provide a fairer, more realistic evaluation of model performance.
+Given the trade-off between accuracy, recall, and resource requirements—and considering the current state of the dataset—the **5MPX (imgsz=1920) model** is the best choice for further development and deployment. Future work should include revising and completing the annotation set to provide a fairer, more realistic evaluation of model performance.mag
+
+### 10. Creating 120×120 Object-Centered Crops
+
+To create a lightweight dataset suitable for object-level detection or classification, I wrote a script that processes all training and validation images from my existing 5MPX YOLO-format dataset. For each bounding box in the annotations, I extracted a **120×120 crop centered on the object**.
+
+Each crop becomes an individual training sample. I carefully adjusted the bounding box coordinates to the new crop and saved them in YOLO format. I also filtered out cases where the crop would fall outside the image bounds or have invalid label formats.
+
+I stored the resulting cropped images and updated labels in a new structure under `sticky_dataset/120px/train/` and `val/`. Cropped files are named as:
+
+```
+originalfilename_bb{index}_class{class_id}.jpg
+```
+
+This step greatly increased the number of samples and allowed me to move toward resolution-independent training experiments.
+
+---
+
+### 11. Augmenting Crops with Rotation and Brightness Variations
+
+To further increase dataset robustness, I wrote a second script that augments each 120×120 cropped image using:
+
+- **Rotations**: 90°, 180°, 270°
+- **Optional Brightness Reduction**: applied randomly to 50% of the augmented images
+
+Each image was read from the previous output folder. Using OpenCV, I rotated the image and recalculated the YOLO bounding box for each orientation. I also added brightness reduction using a scaling factor to simulate poor lighting conditions.
+
+All augmented files are saved in the same directory as the originals, using the following naming convention:
+
+```
+originalfilename_bb0_class1_rot90.jpg
+originalfilename_bb0_class1_rot180_dark.jpg
+...
+```
+
+This resulted in multiple views per object and greatly increased the training set diversity — all while preserving the original bounding box structure.
+
+---
+
+
+### 12. Training with 120×120 Object-Centered Crops
+
+After generating the 120×120 cropped dataset centered on each object and applying rotation and brightness augmentations, I trained a YOLOv8 model using these lightweight images. Despite the reduced input size, the model achieved **the best results across all metrics**, surpassing both the 5MPX and 16MPX models.
+
+## command used
+```bash
+yolo detect train \  data=sticky_dataset/120px/dataset.yaml \  imgsz=128 \  epochs=300 \  batch=1536 \  patience=20 \  mixup=0.5 \  cutmix=0.5 \  project=. \  name=120px
+```
+
+### YOLOv8 Training Results (imgsz=128, best.pt at epoch 65)
+
+| Class         | Images | Instances | Precision | Recall | mAP50 | mAP50-95 |
+|:--------------|-------:|----------:|----------:|-------:|------:|---------:|
+| **All**       |   8845 |      8845 |   0.860   | 0.885  | **0.914** | **0.483** |
+| Macrolophus   |   1505 |      1505 |   0.857   | 0.891  | 0.917 | 0.473  |
+| Nesidiocoris  |    405 |       405 |   0.908   | 0.960  | 0.971 | 0.594  |
+| Whitefly      |   6935 |      6935 |   0.814   | 0.803  | 0.854 | 0.381  |
+
+![Result: validation metrics and performance](120px/results.png)  
+*Figure: Model training summary on 120×120 crops. Despite the small resolution, this model achieved the best mAP across all resolutions tested.*
+
+---
+
+### 🧠 Final Observations
+
+- This model consistently outperformed larger input sizes (1920 and 2560 px), proving that object-centered crops with high augmentation diversity are extremely effective.
+- The high mAP@50 (0.914) and mAP@50–95 (0.483) demonstrate excellent localization and generalization.
+- It’s also the lightest and fastest model, making it ideal for deployment on edge devices.
