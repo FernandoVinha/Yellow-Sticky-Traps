@@ -46,57 +46,115 @@ After running this, all images matched their respective annotation files, and bo
 
 ---
 
-### 4. Training and Further Insights
 
-With the orientation fixed, I proceeded to train object detection models at different image resolutions (16MP, 5MP, and 2MP) to balance accuracy and efficiency for edge deployment.  
-I also discovered that many insects in the dataset **weren’t annotated at all**, which resulted in false positives during evaluation.  
-To further optimize for microcontroller usage, I later sliced images into small patches focused on annotated insects.
+### 4. Converting VOC XML Annotations to YOLO Format
 
----
+With all images now properly oriented, the next challenge was to **convert the annotation format**. The original dataset provides bounding boxes in Pascal VOC XML, while YOLO requires a simple TXT format with normalized coordinates.
 
-### 5. Final Step: Cropping to 120px Patches – Solving False Positives
+To automate this, I created a script that:
+- **Scans the dataset folder** (`sticky_dataset/stickytraps`) for each image/XML pair.
+- **Maps each object class abbreviation** (e.g., WF, MR, NC) to the correct YOLO class index.
+- **Calculates normalized bounding box coordinates** based on the actual image size.
+- **Skips boxes or objects that are out-of-bounds or have unknown classes.**
+- **Writes YOLO-format `.txt` files** for each image, ready for training.
 
-After noticing that the model was still producing some false positives, I realized that the problem was partially due to large image areas with background and no insects.  
-To address this, I implemented a **cropping strategy**: I split each image into 120x120 pixel patches and **kept only the patches that actually contained annotated insects**.
+This process was essential to make the dataset compatible with Ultralytics YOLOv8.
 
-#### Result:
-- The model now trained only on regions with real insects.
-- This **significantly reduced false positives**, since the model was no longer exposed to large empty backgrounds or ambiguous areas.
-- The pipeline also became much more suitable for deployment on microcontrollers and other edge devices, as each inference now happened on a small, focused patch.
+### 5. Splitting the Dataset and Generating the YOLO Dataset YAML
 
----
+With all images and annotations now converted to YOLO format, the next step was to **split the dataset into training and validation sets**, and to organize the files in the structure expected by YOLOv8.
 
-## Workflow Summary
+I created a script to:
+- **Randomly shuffle** all images.
+- **Split the dataset** into 80% for training and 20% for validation.
+- **Copy images and their corresponding YOLO annotation `.txt` files** into subfolders:
+    - `images/train/` and `labels/train/`
+    - `images/val/` and `labels/val/`
+    (all inside the new dataset directory, e.g., `sticky_dataset/16mpx/`)
+- **Automatically generate the `dataset.yaml` file** required by Ultralytics YOLO, listing the correct paths and class names.
 
-1. Download and inspect the data (`print.py`)
-2. Try a blind rotation (didn't work) (`print_90.py`)
-3. Fix orientation intelligently (`fix_dataset.py`)
-4. Train models and analyze annotation quality
-5. **Crop images to 120x120px patches containing insects to eliminate false positives**
+This ensures the dataset is in the right format for a smooth YOLO training experience.
 
----
+### 6. Training with 16 MPX Images
 
-## Included Scripts
+## command used
+```bash
+  yolo detect train \ data=sticky_dataset/16mpx/dataset.yaml \ epochs=100 \ imgsz=2560 \ batch=8 \ project=. \ name=16mpx
+```
 
-- `print.py` — Initial inspection: print and view dataset images.
-- `print_90.py` — Blind 90-degree rotation test (failed experiment).
-- `fix_dataset.py` — Final script: rotate only portrait images.
-- (Others: cropping, training, etc. as your pipeline evolved.)
+### YOLOv8 Training Results (imgsz=2560, epochs=100)
 
----
+| Class         | Images | Instances | Precision | Recall | mAP50 | mAP50-95 |
+|:--------------|-------:|----------:|----------:|-------:|------:|---------:|
+| **All**       |     56 |      1670 |     0.758 |  0.786 | 0.772 |   0.378  |
+| Macrolophus   |     33 |       296 |     0.791 |  0.869 | 0.831 |   0.397  |
+| Nesidiocoris  |     14 |        81 |     0.693 |  0.889 | 0.808 |   0.478  |
+| Whitefly      |     37 |      1293 |     0.790 |  0.599 | 0.676 |   0.258  |
 
-## Lessons for Others
+![Result: rotation worked for this image](16mpx/results.png)  
+*Figure: Example of the model’s training performance and validation metrics over 100 epochs. The plot summarizes loss curves, mAP, and accuracy.*
 
-- **Always inspect a dataset visually before training.**
-- **Never assume annotations are perfect or that all images share the same orientation.**
-- **Try, test, and validate every preprocessing step, not just theoretically, but by visualizing the result.**
-- **Smart, targeted preprocessing beats “one-size-fits-all” fixes every time.**
+### 7. Training with 5 MPX Images
 
----
+## command used
+```bash
+  yolo detect train \ data=sticky_dataset/16mpx/dataset.yaml \ epochs=100 \ imgsz=1920 \ batch=4 \ project=. \ name=5mpx
+```
 
-## Contact
+### YOLOv8 Training Results (imgsz=1920, epochs=100)
 
-For questions, improvements, or if you want to share experiences with similar datasets:  
-[your email or GitHub]
+| Class        | Images | Instances | Precision | Recall | mAP50 | mAP50-95 |
+| :----------- | -----: | --------: | --------: | -----: | -----:| --------:|
+| **All**      |     56 |     1670  |   0.754   | 0.813  | 0.781 |   0.370  |
+| Macrolophus  |     33 |      296  |   0.779   | 0.851  | 0.799 |   0.367  |
+| Nesidiocoris |     14 |       81  |   0.715   | 0.901  | 0.845 |   0.491  |
+| Whitefly     |     37 |     1293  |   0.768   | 0.686  | 0.700 |   0.252  |
 
----
+![Result: rotation worked for this image](5mpx/results.png)  
+*Figure: Example of the model’s training performance and validation metrics over 100 epochs. The plot summarizes loss curves, mAP, and accuracy.*
+
+
+
+### 8. Training with 2 MPX Images
+
+## command used
+```bash
+  yolo detect train \ data=sticky_dataset/16mpx/dataset.yaml \ epochs=100 \ imgsz=1408 \ batch=8 \ project=. \ name=5mpx
+```
+
+### YOLOv8 Training Results (imgsz=1920, epochs=100)
+
+| Class        | Images | Instances | Precision | Recall | mAP50 | mAP50-95 |
+| :----------- | -----: | --------: | --------: | -----: | -----:| --------:|
+| **All**      |     56 |     1670  |   0.736   | 0.810  | 0.771 |   0.357  |
+| Macrolophus  |     33 |      296  |   0.785   | 0.837  | 0.835 |   0.368  |
+| Nesidiocoris |     14 |       81  |   0.696   | 0.901  | 0.815 |   0.462  |
+| Whitefly     |     37 |     1293  |   0.726   | 0.691  | 0.664 |   0.240  |
+
+![Result: rotation worked for this image](2mpx/results.png)  
+*Figure: Example of the model’s training performance and validation metrics over 100 epochs. The plot summarizes loss curves, mAP, and accuracy.*
+
+### 9. Comparative Analysis and Model Selection
+
+After training and validating YOLOv8 models at three different input resolutions—**16MPX (imgsz=2560)**, **5MPX (imgsz=1920)**, and **2MPX (imgsz=1408)**—it became clear that image resolution plays an important role in both overall performance and resource consumption.
+
+#### **Results Overview:**
+
+- The **16MPX model** (imgsz=2560) delivered high precision for all classes, especially Macrolophus and Whitefly, but recall was noticeably lower for Whitefly, likely due to missed detections of small or poorly labeled individuals. The computational cost and VRAM required were also substantially higher.
+- The **2MPX model** (imgsz=1408) was lighter and faster to train, but the drop in both precision and mAP indicates some loss in the model’s ability to detect smaller or less distinct objects, as shown by a slight decrease in performance across all metrics.
+- The **5MPX model** (imgsz=1920) achieved the **best balance** between precision, recall, and mAP, particularly for the critical Nesidiocoris and Whitefly classes. Its performance is consistently high, while requiring less GPU memory and computational resources than the 16MPX model.
+
+#### **Why choose 5MPX?**
+
+The 5MPX configuration stands out as the most balanced choice. It provides competitive detection performance for all classes, and especially improves recall for Whitefly and Nesidiocoris compared to the highest resolution. This means the model is more likely to catch true positives, even in challenging or cluttered backgrounds, without the heavy computational cost of 16MPX training.
+
+#### **Dataset Labeling Issue:**
+
+It’s important to highlight that **the dataset is producing a significant number of false positives** during validation and testing. This is not necessarily a model problem, but a dataset limitation:  
+> **Many insects are present in the images but were not annotated by the original dataset authors.**
+
+As a result, when the model detects these “unlabeled” insects, they are counted as false positives, unfairly penalizing the precision and mAP metrics. This highlights the importance of high-quality, exhaustive annotation for robust model evaluation.
+
+#### **Conclusion:**
+
+Given the trade-off between accuracy, recall, and resource requirements—and considering the current state of the dataset—the **5MPX (imgsz=1920) model** is the best choice for further development and deployment. Future work should include revising and completing the annotation set to provide a fairer, more realistic evaluation of model performance.
