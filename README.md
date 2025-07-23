@@ -8,7 +8,7 @@ After downloading the [Kaggle Yellow Sticky Traps dataset](https://www.kaggle.co
 To do this, I wrote `print.py` to simply open and display each image.
 
 ![First preview: original annotation misalignment](images/1000_preview.jpg)  
-*Figure: Example of a portrait image with misaligned bounding boxes (`1000_preview.jpg`).*
+*Figure 1: Misaligned bounding boxes due to incorrect orientation (portrait image).*
 
 #### Key finding:
 - Some images were in **portrait**, others in **landscape**.
@@ -23,10 +23,10 @@ Thinking the problem was only with portrait images, I tried to rotate all images
 But this approach **didn’t solve the problem**—in fact, it broke the alignment for the landscape images! Now both types could end up mismatched with their annotations, depending on the original orientation.
 
 ![Result: rotation worked for this image](images/1000_rotated_annotated.jpg)  
-*Figure: Rotating a portrait image aligned the boxes (`1000_rotated_annotated.jpg`).*
+*Figure 2: Corrected orientation for a portrait image.*
 
 ![Result: rotation failed for this image](images/1170_rotated_annotated.jpg)  
-*Figure: Rotating a landscape image misaligned the boxes (`1170_rotated_annotated.jpg`).*
+*Figure 3: Incorrectly rotated landscape image.*
 
 #### Lesson:
 - Rotating everything blindly is not enough.  
@@ -225,3 +225,42 @@ yolo detect train \  data=sticky_dataset/120px/dataset.yaml \  imgsz=128 \  epoc
 - This model consistently outperformed larger input sizes (1920 and 2560 px), proving that object-centered crops with high augmentation diversity are extremely effective.
 - The high mAP@50 (0.914) and mAP@50–95 (0.483) demonstrate excellent localization and generalization.
 - It’s also the lightest and fastest model, making it ideal for deployment on edge devices.
+
+## 13. Conversão para TensorFlow Lite Micro 
+
+Para usar o modelo YOLOv8 em um microcontrolador como o microcontroller com TensorFlow Lite Micro, siga os passos abaixo para exportar e quantizar o modelo:
+
+### Passo 1 — Exportar o modelo treinado
+
+```bash
+yolo export model=120px/weights/best.pt format=onnx
+```
+
+### Passo 2 — Instalar dependências compatíveis
+
+```bash
+pip install "numpy<2.0" "protobuf<=3.20.3"
+```
+
+### Passo 3 — Executar a conversão para `.tflite` com quantização total
+
+Crie e execute o script `convert_to_tflite.py`, contendo a função `representative_dataset_gen()` que usa imagens reais de amostra:
+
+```bash
+python convert_to_tflite.py
+```
+
+> Saída esperada:
+> ```
+> ✅ Modelo TFLite quantizado salvo em 120px/weights/best_quantized.tflite
+> ```
+
+### Passo 4 — Converter o `.tflite` para `.cc` para uso embarcado
+
+```bash
+xxd -i 120px/weights/best_quantized.tflite > 120px/weights/best_quantized.cc
+```
+
+O arquivo `.cc` gerado conterá o modelo em forma de array C (`unsigned char[]`) e pode ser incluído diretamente no firmware para microcontroller com suporte a TensorFlow Lite Micro.
+
+---
